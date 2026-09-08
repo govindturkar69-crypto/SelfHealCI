@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+google-genai
+docker
+psycopg2-binary
+pgvector

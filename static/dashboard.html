@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SelfHealCI Dashboard</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #0f1117; color: #e4e4e7; margin: 0; padding: 2rem; }
+        h1 { color: #fff; }
+        .controls { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        input, button { padding: 0.6rem; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333; }
+        input { flex: 1; background: #1a1d27; color: #fff; }
+        button { background: #4f46e5; color: #fff; border: none; cursor: pointer; }
+        button:hover { background: #4338ca; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .incident { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-right: 0.5rem; }
+        .badge.pending { background: #78350f; color: #fbbf24; }
+        .badge.success { background: #14532d; color: #4ade80; }
+        .badge.failed { background: #7f1d1d; color: #f87171; }
+        .category { color: #a5b4fc; font-size: 0.85rem; }
+        .error-msg { font-family: monospace; background: #0f1117; padding: 0.5rem; border-radius: 4px; margin: 0.5rem 0; font-size: 0.85rem; overflow-x: auto; }
+        .fix-text { font-size: 0.9rem; color: #cbd5e1; }
+        .meta { font-size: 0.75rem; color: #71717a; margin-top: 0.5rem; }
+        #status { margin-top: 0.5rem; font-size: 0.85rem; color: #a5b4fc; }
+    </style>
+</head>
+<body>
+    <h1>🩹 SelfHealCI Dashboard</h1>
+
+    <div class="controls">
+        <input type="text" id="repoInput" placeholder="owner/repo (e.g. govindturkar69-crypto/NexusCode)" value="govindturkar69-crypto/NexusCode">
+        <button id="runBtn" onclick="runAgent()">Run Agent</button>
+        <button onclick="loadIncidents()">Refresh</button>
+    </div>
+    <div id="status"></div>
+
+    <div id="incidents">Loading...</div>
+
+    <script>
+        async function loadIncidents() {
+            const container = document.getElementById('incidents');
+            container.innerHTML = 'Loading...';
+            const res = await fetch('/incidents');
+            const data = await res.json();
+
+            if (data.length === 0) {
+                container.innerHTML = '<p>No incidents yet.</p>';
+                return;
+            }
+
+            container.innerHTML = data.map(inc => {
+                let badgeClass = 'pending', badgeText = 'PENDING';
+                if (inc.success === true) { badgeClass = 'success'; badgeText = 'FIXED'; }
+                if (inc.success === false) { badgeClass = 'failed'; badgeText = 'NOT FIXED'; }
+
+                return `
+                    <div class="incident">
+                        <span class="badge ${badgeClass}">${badgeText}</span>
+                        <span class="category">${inc.category}</span>
+                        <div class="error-msg">${escapeHtml(inc.error_message)}</div>
+                        <div class="fix-text">${escapeHtml(inc.fix_text)}</div>
+                        <div class="meta">${inc.repo} · ${new Date(inc.created_at).toLocaleString()}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function runAgent() {
+            const repo = document.getElementById('repoInput').value.trim();
+            if (!repo) return;
+
+            const btn = document.getElementById('runBtn');
+            const status = document.getElementById('status');
+            btn.disabled = true;
+            status.textContent = 'Running agent...';
+
+            try {
+                const res = await fetch(`/run-agent?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
+                const data = await res.json();
+                status.textContent = `Done: ${data.status}`;
+                await loadIncidents();
+            } catch (err) {
+                status.textContent = 'Error running agent.';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        loadIncidents();
+    </script>
+</body>
+</html>
