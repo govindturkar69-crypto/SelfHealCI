@@ -4,17 +4,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv("GITHUB_TOKEN")
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
-    "Accept": "application/vnd.github+json"
-}
+DEFAULT_TOKEN = os.getenv("GITHUB_TOKEN")
 
 
-def get_latest_failed_run(repo: str) -> dict:
+def _headers(token: str = None) -> dict:
+    return {
+        "Authorization": f"Bearer {token or DEFAULT_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+
+
+def get_latest_failed_run(repo: str, token: str = None) -> dict:
     """Returns the most recent failed workflow run, or None."""
     url = f"https://api.github.com/repos/{repo}/actions/runs"
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=_headers(token))
     data = response.json()
 
     for run in data.get("workflow_runs", []):
@@ -23,10 +26,10 @@ def get_latest_failed_run(repo: str) -> dict:
     return None
 
 
-def get_failed_job(repo: str, run_id: int) -> dict:
+def get_failed_job(repo: str, run_id: int, token: str = None) -> dict:
     """Returns the first failed job in a given run, or None."""
     url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs"
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=_headers(token))
     data = response.json()
 
     for job in data.get("jobs", []):
@@ -35,10 +38,10 @@ def get_failed_job(repo: str, run_id: int) -> dict:
     return None
 
 
-def get_job_logs(repo: str, job_id: int) -> str:
+def get_job_logs(repo: str, job_id: int, token: str = None) -> str:
     """Returns the raw log text for a job."""
     url = f"https://api.github.com/repos/{repo}/actions/jobs/{job_id}/logs"
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=_headers(token))
     return response.text
 
 

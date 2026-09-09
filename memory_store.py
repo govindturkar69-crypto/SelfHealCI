@@ -25,7 +25,7 @@ def get_connection():
     return psycopg2.connect(DATABASE_URL)
 
 
-def store_incident(category: str, error_message: str, fix_text: str, success: bool, repo: str = None):
+def store_incident(category: str, error_message: str, fix_text: str, success: bool, repo: str = None, user_id: int = None):
     """Embeds the error and stores the incident (fix attempt + outcome) in the database."""
     embedding = get_embedding(error_message)
 
@@ -34,10 +34,10 @@ def store_incident(category: str, error_message: str, fix_text: str, success: bo
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO incidents (category, error_message, fix_text, embedding, success, repo)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO incidents (category, error_message, fix_text, embedding, success, repo, user_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (category, error_message, fix_text, embedding, success, repo)
+        (category, error_message, fix_text, embedding, success, repo, user_id)
     )
     conn.commit()
     cur.close()

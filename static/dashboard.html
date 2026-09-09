@@ -25,7 +25,8 @@
     </style>
 </head>
 <body>
-    <h1>🩹 SelfHealCI Dashboard</h1>
+        <h1>🩹 SelfHealCI Dashboard</h1>
+    <div id="authStatus" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
 
     <div class="controls">
         <input type="text" id="repoInput" placeholder="owner/repo (e.g. govindturkar69-crypto/NexusCode)" value="govindturkar69-crypto/NexusCode">
@@ -92,6 +93,18 @@
             }
         }
 
+                async function checkAuth() {
+            const res = await fetch('/me');
+            const data = await res.json();
+            const authDiv = document.getElementById('authStatus');
+            if (data.logged_in) {
+                authDiv.innerHTML = `Logged in as <strong>${data.username}</strong> · <a href="/auth/logout" style="color:#a5b4fc;">Log out</a>`;
+            } else {
+                authDiv.innerHTML = `<a href="/auth/github/login" style="color:#4ade80;">🔗 Connect GitHub</a> to run the agent with your own account`;
+            }
+        }
+
+        checkAuth();
         loadIncidents();
     </script>
 </body>
