@@ -10,6 +10,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
+from fastapi import HTTPException
 
 load_dotenv()
 
@@ -91,16 +92,22 @@ def root():
 
 
 @app.get("/incidents")
-def list_incidents():
-    """Returns all stored incidents, most recent first."""
+def list_incidents(request: Request):
+    """Returns the logged-in user's own incidents, most recent first."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """
         SELECT id, category, error_message, fix_text, success, repo, created_at
         FROM incidents
+        WHERE user_id = %s
         ORDER BY created_at DESC
-        """
+        """,
+        (user_id,)
     )
     rows = cur.fetchall()
     cur.close()
@@ -115,10 +122,32 @@ def list_incidents():
         for r in rows
     ]
 
-
 @app.get("/incidents/unconfirmed")
-def list_unconfirmed():
-    return get_unconfirmed_incidents(limit=50)
+def list_unconfirmed(request: Request):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, category, error_message, fix_text, repo, created_at
+        FROM incidents
+        WHERE success IS NULL AND user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 50
+        """,
+        (user_id,)
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return [
+        {"id": r[0], "category": r[1], "error_message": r[2], "fix_text": r[3], "repo": r[4], "created_at": r[5].isoformat()}
+        for r in rows
+    ]
 
 @app.get("/dashboard")
 def dashboard():
@@ -126,22 +155,25 @@ def dashboard():
 
 @app.post("/run-agent")
 def trigger_agent(repo: str, request: Request):
-    """Manually triggers the agent to check a repo for the latest failed run, using the logged-in user's token."""
+    """Triggers the agent to check a repo, using the logged-in user's own GitHub token."""
     user_id = request.session.get("user_id")
 
-    token = None
-    if user_id:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT github_access_token FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row:
-            token = row[0]
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
 
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT github_access_token FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found. Please log in again.")
+
+    token = row[0]
     result = run_agent(repo, token=token, user_id=user_id)
-    return {"repo": repo, "logged_in": user_id is not None, **result}
+    return {"repo": repo, **result}
 
 @app.get("/me")
 def me(request: Request):
@@ -154,3 +186,54 @@ def me(request: Request):
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/dashboard")
+
+@app.post("/incidents/{incident_id}/confirm")
+def confirm_incident(incident_id: int, success: bool, request: Request):
+    """Marks an incident (owned by the logged-in user) as fixed or not fixed."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE incidents SET success = %s WHERE id = %s AND user_id = %s",
+        (success, incident_id, user_id)
+    )
+    updated = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if updated == 0:
+        raise HTTPException(status_code=404, detail="Incident not found or not yours.")
+
+    return {"status": "updated", "incident_id": incident_id, "success": success}
+
+
+@app.get("/my-repos")
+def my_repos(request: Request):
+    """Returns the logged-in user's own GitHub repos."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT github_access_token FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    token = row[0]
+    response = http_requests.get(
+        "https://api.github.com/user/repos",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"sort": "updated", "per_page": 50}
+    )
+    repos = response.json()
+
+    return [{"full_name": r["full_name"], "private": r["private"]} for r in repos]

@@ -28,8 +28,10 @@
         <h1>🩹 SelfHealCI Dashboard</h1>
     <div id="authStatus" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
 
-    <div class="controls">
-        <input type="text" id="repoInput" placeholder="owner/repo (e.g. govindturkar69-crypto/NexusCode)" value="govindturkar69-crypto/NexusCode">
+        <div class="controls" id="controlsDiv" style="display:none;">
+                <select id="repoInput" style="flex:1; padding:0.6rem; background:#1a1d27; color:#fff; border:1px solid #333; border-radius:6px;">
+            <option value="">Log in to load your repos...</option>
+        </select>
         <button id="runBtn" onclick="runAgent()">Run Agent</button>
         <button onclick="loadIncidents()">Refresh</button>
     </div>
@@ -38,10 +40,16 @@
     <div id="incidents">Loading...</div>
 
     <script>
-        async function loadIncidents() {
+                async function loadIncidents() {
             const container = document.getElementById('incidents');
             container.innerHTML = 'Loading...';
             const res = await fetch('/incidents');
+
+            if (res.status === 401) {
+                container.innerHTML = '<p>Connect your GitHub account above to see your incidents.</p>';
+                return;
+            }
+
             const data = await res.json();
 
             if (data.length === 0) {
@@ -49,10 +57,17 @@
                 return;
             }
 
-            container.innerHTML = data.map(inc => {
+                        container.innerHTML = data.map(inc => {
                 let badgeClass = 'pending', badgeText = 'PENDING';
                 if (inc.success === true) { badgeClass = 'success'; badgeText = 'FIXED'; }
                 if (inc.success === false) { badgeClass = 'failed'; badgeText = 'NOT FIXED'; }
+
+                const confirmButtons = inc.success === null ? `
+                    <div style="margin-top: 0.75rem;">
+                        <button onclick="confirmIncident(${inc.id}, true)" style="background:#166534; font-size:0.8rem; padding:0.4rem 0.8rem;">✓ Mark Fixed</button>
+                        <button onclick="confirmIncident(${inc.id}, false)" style="background:#991b1b; font-size:0.8rem; padding:0.4rem 0.8rem;">✗ Mark Not Fixed</button>
+                    </div>
+                ` : '';
 
                 return `
                     <div class="incident">
@@ -61,18 +76,23 @@
                         <div class="error-msg">${escapeHtml(inc.error_message)}</div>
                         <div class="fix-text">${escapeHtml(inc.fix_text)}</div>
                         <div class="meta">${inc.repo} · ${new Date(inc.created_at).toLocaleString()}</div>
+                        ${confirmButtons}
                     </div>
                 `;
             }).join('');
         }
 
-        function escapeHtml(str) {
+                    function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
         }
 
-        async function runAgent() {
+        async function confirmIncident(id, success) {
+            await fetch(`/incidents/${id}/confirm?success=${success}`, { method: 'POST' });
+            await loadIncidents();
+
+        }        async function runAgent() {
             const repo = document.getElementById('repoInput').value.trim();
             if (!repo) return;
 
@@ -93,19 +113,36 @@
             }
         }
 
-                async function checkAuth() {
+                                async function checkAuth() {
             const res = await fetch('/me');
             const data = await res.json();
             const authDiv = document.getElementById('authStatus');
+            const controlsDiv = document.getElementById('controlsDiv');
+
             if (data.logged_in) {
                 authDiv.innerHTML = `Logged in as <strong>${data.username}</strong> · <a href="/auth/logout" style="color:#a5b4fc;">Log out</a>`;
+                controlsDiv.style.display = 'flex';
+                await loadMyRepos();
             } else {
                 authDiv.innerHTML = `<a href="/auth/github/login" style="color:#4ade80;">🔗 Connect GitHub</a> to run the agent with your own account`;
+                controlsDiv.style.display = 'none';
             }
         }
 
-        checkAuth();
+        async function loadMyRepos() {
+            const select = document.getElementById('repoInput');
+            const res = await fetch('/my-repos');
+            if (!res.ok) return;
+            const repos = await res.json();
+
+            select.innerHTML = repos.map(r =>
+                `<option value="${r.full_name}">${r.full_name}${r.private ? ' 🔒' : ''}</option>`
+            ).join('');
+        }
+
+             checkAuth();
         loadIncidents();
+
     </script>
 </body>
 </html>
