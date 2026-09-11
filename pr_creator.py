@@ -29,11 +29,17 @@ def create_branch(repo: str, new_branch: str, base_sha: str, token: str = None) 
     response.raise_for_status()
     return response.json()
 
-
 def commit_file(repo: str, branch: str, file_path: str, content: str, commit_message: str, token: str = None) -> dict:
     url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
     encoded_content = base64.b64encode(content.encode()).decode()
+
     payload = {"message": commit_message, "content": encoded_content, "branch": branch}
+
+    # If the file already exists on this branch, we need its current sha to update it
+    existing = requests.get(url, headers=_headers(token), params={"ref": branch})
+    if existing.status_code == 200:
+        payload["sha"] = existing.json()["sha"]
+
     response = requests.put(url, headers=_headers(token), json=payload)
     response.raise_for_status()
     return response.json()

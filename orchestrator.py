@@ -1,8 +1,10 @@
-from github_client import get_latest_failed_run, get_failed_job, get_job_logs, extract_error_lines
-from classifier import classify_error
-from fix_generator import generate_fix
+from github_client import get_latest_failed_run, get_failed_job, get_job_logs, extract_error_lines, get_file_content
+from classifier import classify_error, extract_file_and_line
+from fix_generator import generate_fix, generate_patch
 from memory_store import find_similar_incidents, store_incident
-from pr_creator import create_issue
+from pr_creator import create_issue, get_default_branch_sha, create_branch, commit_file, create_pull_request
+from sandbox import apply_patch_and_test
+import time
 
 
 def run_agent(repo: str, token: str = None, user_id: int = None):
@@ -41,14 +43,31 @@ def run_agent(repo: str, token: str = None, user_id: int = None):
     similar = find_similar_incidents(signature["primary_message"])
     print(f"\nFound {len(similar)} similar past incident(s) in memory.")
 
-    # Step 6: generate a fix, informed by memory
+    # Step 6: try to extract a specific file + line from the FULL log (not just the filtered error lines)
+    file_ref = extract_file_and_line(log_text)
+
+    if file_ref:
+        print(f"\nFound a specific file reference: {file_ref['file_path']} (line {file_ref['line_number']})")
+        patch_result = try_auto_patch(repo, file_ref, signature, token=token)
+        if patch_result:
+            store_incident(
+                category=signature["category"],
+                error_message=signature["primary_message"],
+                fix_text=f"Auto-generated patch to {file_ref['file_path']}, verified passing in sandbox. PR: {patch_result['pr_url']}",
+                success=None,
+                repo=repo,
+                user_id=user_id
+            )
+            return {"status": "patch_pr_opened", "pr_url": patch_result["pr_url"]}
+        else:
+            print("\nAuto-patch attempt did not produce a passing fix. Falling back to advisory issue.")
+
+    # Fallback: advisory issue (no file reference found, or patch attempt failed sandbox testing)
     fix_text = generate_fix(signature, similar_incidents=similar)
-    print("\n--- Suggested Fix ---")
+    print("\n--- Suggested Fix (advisory) ---")
     print(fix_text)
 
-    # Step 7: open a GitHub issue with the diagnosis
     issue_title = "[SelfHealCI] " + signature["category"] + ": " + signature["primary_message"][:80]
-
     issue_body_lines = [
         "## Automated diagnosis by SelfHealCI",
         "",
@@ -72,7 +91,6 @@ def run_agent(repo: str, token: str = None, user_id: int = None):
     issue = create_issue(repo, issue_title, issue_body, token=token)
     print("\nOpened issue: " + issue["html_url"])
 
-    # Step 8: store this incident in memory as unconfirmed (success=None), tagged to the user
     store_incident(
         category=signature["category"],
         error_message=signature["primary_message"],
@@ -83,8 +101,54 @@ def run_agent(repo: str, token: str = None, user_id: int = None):
     )
     print("\nStored incident in memory (pending confirmation).")
 
-    return {"status": "completed", "issue_url": issue["html_url"]}
+    return {"status": "issue_opened", "issue_url": issue["html_url"]}
+
+
+def try_auto_patch(repo: str, file_ref: dict, signature: dict, token: str = None):
+    """Attempts to generate, test, and open a PR for a real code patch. Returns None if it doesn't pass sandbox testing."""
+    file_path = file_ref["file_path"]
+
+    try:
+        file_content = get_file_content(repo, file_path, token=token)
+    except Exception as e:
+        print(f"Could not fetch file content for {file_path}: {e}")
+        return None
+
+    print(f"\nFetched {file_path} ({len(file_content)} chars). Asking Gemini for a patch...")
+    new_content = generate_patch(signature, file_path, file_content)
+
+    clone_url = f"https://github.com/{repo}.git" if not token else f"https://{token}@github.com/{repo}.git"
+
+    print("Testing the patch in a sandbox...")
+    test_result = apply_patch_and_test(clone_url, file_path, new_content)
+
+    print(f"Sandbox test exit code: {test_result['exit_code']}")
+    if test_result["exit_code"] != 0:
+        print("Patch did NOT pass tests in sandbox.")
+        print(test_result["logs"][-1000:])
+        return None
+
+    print("Patch PASSED tests in sandbox. Opening a PR...")
+
+    branch_name = f"selfhealci-fix-{int(time.time())}"
+    base_sha = get_default_branch_sha(repo, token=token)
+    create_branch(repo, branch_name, base_sha, token=token)
+    commit_file(
+        repo, branch_name, file_path, new_content,
+        f"SelfHealCI: auto-fix for {signature['category']}",
+        token=token
+    )
+    pr = create_pull_request(
+        repo, branch_name, "main",
+        f"[SelfHealCI] Auto-fix: {signature['category']}",
+        f"This PR was generated automatically by SelfHealCI.\n\n"
+        f"**Error:** {signature['primary_message']}\n\n"
+        f"The fix was tested in an isolated sandbox and the test suite passed. "
+        f"Please review before merging.",
+        token=token
+    )
+    return {"pr_url": pr["html_url"]}
 
 
 if __name__ == "__main__":
-    run_agent("govindturkar69-crypto/NexusCode")
+    run_agent("govindturkar69-crypto/selfhealci-test-fixture")

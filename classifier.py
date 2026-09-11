@@ -56,3 +56,12 @@ def classify_error(error_lines: list[str]) -> dict:
         "all_error_lines": cleaned_lines,
         "has_specific_diagnosis": category not in ("unknown", "generic_exit_error"),
     }
+
+FILE_LINE_PATTERN = re.compile(r"([a-zA-Z0-9_/.\-]+\.py):(\d+):")
+
+def extract_file_and_line(log_text: str) -> dict:
+    """Looks for a Python traceback-style 'file.py:line:' reference in the log."""
+    match = FILE_LINE_PATTERN.search(log_text)
+    if match:
+        return {"file_path": match.group(1), "line_number": int(match.group(2))}
+    return None

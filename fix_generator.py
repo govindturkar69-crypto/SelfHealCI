@@ -38,3 +38,26 @@ Be specific and concise. Do not add disclaimers.
         contents=prompt
     )
     return response.text
+
+def generate_patch(signature: dict, file_path: str, file_content: str) -> str:
+    """Asks Gemini to return a full corrected version of the file, given the error."""
+    prompt = f"""You are an expert Python developer fixing a CI failure.
+
+The file `{file_path}` caused this test failure:
+
+Category: {signature['category']}
+Error: {signature['primary_message']}
+
+Here is the current content of {file_path}:
+
+```python
+{file_content}
+```
+
+Return ONLY the complete corrected version of this file. Do not include explanations, markdown code fences, or any text other than the raw Python code itself. The fix should be minimal and targeted at the actual bug - do not rewrite unrelated parts of the file.
+"""
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
+    )
+    return response.text.strip()

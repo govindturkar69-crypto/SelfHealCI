@@ -50,3 +50,13 @@ def extract_error_lines(log_text: str) -> list[str]:
     lines = log_text.splitlines()
     error_keywords = ["error", "Error", "ERROR", "failed", "Failed", "FAILED", "Traceback", "exception"]
     return [line for line in lines if any(kw in line for kw in error_keywords)]
+
+import base64
+
+def get_file_content(repo: str, file_path: str, ref: str = "main", token: str = None) -> str:
+    """Fetches a file's raw text content from a repo at a given ref."""
+    url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+    response = requests.get(url, headers=_headers(token), params={"ref": ref})
+    response.raise_for_status()
+    data = response.json()
+    return base64.b64decode(data["content"]).decode("utf-8")
