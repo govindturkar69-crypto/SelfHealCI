@@ -1,3 +1,5 @@
+from notifier import send_email, send_slack_message
+from memory_store import get_connection
 from github_client import get_latest_failed_run, get_failed_job, get_job_logs, extract_error_lines, get_file_content
 from classifier import classify_error, extract_file_and_line
 from fix_generator import generate_fix, generate_patch
@@ -6,6 +8,26 @@ from pr_creator import create_issue, get_default_branch_sha, create_branch, comm
 from sandbox import apply_patch_and_test
 import time
 
+def notify_user(user_id: int, subject: str, message: str):
+    """Sends an email and/or Slack notification to the user, if they've set either up."""
+    if not user_id:
+        return
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT notification_email, slack_webhook_url FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        return
+
+    email, slack_webhook_url = row
+    if email:
+        send_email(email, subject, message)
+    if slack_webhook_url:
+        send_slack_message(slack_webhook_url, message)
 
 def run_agent(repo: str, token: str = None, user_id: int = None):
     print(f"\n=== SelfHealCI checking {repo} ===\n")
@@ -58,6 +80,11 @@ def run_agent(repo: str, token: str = None, user_id: int = None):
                 repo=repo,
                 user_id=user_id
             )
+            notify_user(
+                user_id,
+                f"SelfHealCI: fix ready for {repo}",
+                f"A verified fix was generated and a PR was opened for {repo}.\n\n{patch_result['pr_url']}"
+            )
             return {"status": "patch_pr_opened", "pr_url": patch_result["pr_url"]}
         else:
             print("\nAuto-patch attempt did not produce a passing fix. Falling back to advisory issue.")
@@ -101,6 +128,11 @@ def run_agent(repo: str, token: str = None, user_id: int = None):
     )
     print("\nStored incident in memory (pending confirmation).")
 
+    notify_user(
+        user_id,
+        f"SelfHealCI: diagnosis ready for {repo}",
+        f"A new issue was opened with a diagnosis for {repo}.\n\n{issue['html_url']}"
+    )
     return {"status": "issue_opened", "issue_url": issue["html_url"]}
 
 

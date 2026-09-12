@@ -377,3 +377,38 @@ def list_watched_repos(request: Request):
     cur.close()
     conn.close()
     return repos
+
+@app.post("/settings/notifications")
+def update_notification_settings(request: Request, email: str = None, slack_webhook_url: str = None):
+    """Lets the logged-in user set their notification email and/or Slack webhook."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET notification_email = %s, slack_webhook_url = %s WHERE id = %s",
+        (email, slack_webhook_url, user_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "updated"}
+
+
+@app.get("/settings/notifications")
+def get_notification_settings(request: Request):
+    """Returns the logged-in user's current notification settings."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT notification_email, slack_webhook_url FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return {"email": row[0], "slack_webhook_url": row[1]}

@@ -1,206 +1,509 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>SelfHealCI Dashboard</title>
-    <style>
-        body { font-family: -apple-system, sans-serif; background: #0f1117; color: #e4e4e7; margin: 0; padding: 2rem; }
-        h1 { color: #fff; }
-        .controls { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-        input, button { padding: 0.6rem; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333; }
-        input { flex: 1; background: #1a1d27; color: #fff; }
-        button { background: #4f46e5; color: #fff; border: none; cursor: pointer; }
-        button:hover { background: #4338ca; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        .incident { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
-        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-right: 0.5rem; }
-        .badge.pending { background: #78350f; color: #fbbf24; }
-        .badge.success { background: #14532d; color: #4ade80; }
-        .badge.failed { background: #7f1d1d; color: #f87171; }
-        .category { color: #a5b4fc; font-size: 0.85rem; }
-        .error-msg { font-family: monospace; background: #0f1117; padding: 0.5rem; border-radius: 4px; margin: 0.5rem 0; font-size: 0.85rem; overflow-x: auto; }
-        .fix-text { font-size: 0.9rem; color: #cbd5e1; }
-        .meta { font-size: 0.75rem; color: #71717a; margin-top: 0.5rem; }
-        #status { margin-top: 0.5rem; font-size: 0.85rem; color: #a5b4fc; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SelfHealCI</title>
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --surface: #14161d;
+    --surface-2: #1c1f28;
+    --border: #262a35;
+    --text: #e8e9ed;
+    --text-dim: #8b8d98;
+    --text-faint: #5c5e68;
+    --accent: #6366f1;
+    --accent-hover: #7577f3;
+    --green: #22c55e;
+    --green-bg: #132a1a;
+    --red: #f87171;
+    --red-bg: #2a1515;
+    --amber: #fbbf24;
+    --amber-bg: #2a2310;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  header.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .brand .logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #a855f7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+  }
+
+  .brand h1 {
+    font-size: 1.15rem;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .auth-line {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .auth-line a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .auth-line a:hover { color: var(--accent-hover); }
+
+  .connect-cta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  select, input[type="text"], input[type="email"] {
+    font-family: var(--font);
+    font-size: 0.9rem;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  #repoInput { flex: 1; min-width: 0; }
+
+  button {
+    font-family: var(--font);
+    font-size: 0.85rem;
+    font-weight: 550;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+
+  button:hover { background: var(--accent-hover); }
+  button:active { transform: scale(0.98); }
+  button:disabled { background: var(--surface-2); color: var(--text-faint); cursor: not-allowed; }
+
+  button.secondary { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+  button.secondary:hover { background: #24272f; }
+
+  button.watch { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); }
+  button.watching { background: var(--green-bg); border: 1px solid #1e5631; color: var(--green); }
+
+  button.confirm-fixed { background: var(--green-bg); border: 1px solid #1e5631; color: var(--green); font-size: 0.78rem; padding: 0.4rem 0.75rem; }
+  button.confirm-fixed:hover { background: #17381f; }
+  button.confirm-notfixed { background: var(--red-bg); border: 1px solid #5c2222; color: var(--red); font-size: 0.78rem; padding: 0.4rem 0.75rem; }
+  button.confirm-notfixed:hover { background: #351a1a; }
+
+  #status {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+    min-height: 1.2em;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.9rem 1.1rem;
+  }
+
+  .stat-value { font-size: 1.6rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+  .stat-label { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.3rem; }
+
+  details.settings {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  details.settings summary {
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 550;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  details.settings summary::-webkit-details-marker { display: none; }
+  details.settings summary::before { content: "▸"; color: var(--text-faint); transition: transform 0.15s; font-size: 0.75rem; }
+  details.settings[open] summary::before { transform: rotate(90deg); }
+
+  .settings-body { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .settings-body input { width: 100%; }
+  .settings-body .row { display: flex; align-items: center; gap: 0.75rem; }
+
+  h2.section-title {
+    font-size: 0.78rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin: 0 0 0.75rem;
+  }
+
+  .incident {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .incident-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .badge.pending { background: var(--amber-bg); color: var(--amber); }
+  .badge.success { background: var(--green-bg); color: var(--green); }
+  .badge.failed { background: var(--red-bg); color: var(--red); }
+
+  .category { color: var(--text-dim); font-size: 0.8rem; font-weight: 500; }
+
+  .error-msg {
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.6rem 0.75rem;
+    border-radius: 7px;
+    margin-bottom: 0.65rem;
+    font-size: 0.8rem;
+    color: #f0a5a5;
+    overflow-x: auto;
+  }
+
+  .fix-text { font-size: 0.87rem; color: #c4c6cf; line-height: 1.55; }
+
+  .meta {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    margin-top: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .confirm-row { margin-top: 0.85rem; display: flex; gap: 0.5rem; }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  ::placeholder { color: var(--text-faint); }
+</style>
 </head>
 <body>
-        <h1>🩹 SelfHealCI Dashboard</h1>
-    <div id="authStatus" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
+<div class="page">
 
-        <div class="controls" id="controlsDiv" style="display:none;">
-                <select id="repoInput" onchange="updateWatchButton()" style="flex:1; padding:0.6rem; background:#1a1d27; color:#fff; border:1px solid #333; border-radius:6px;">
-            <option value="">Log in to load your repos...</option>
-        </select>
-        <button id="runBtn" onclick="runAgent()">Run Agent</button>
-        <button onclick="loadIncidents()">Refresh</button>
-        <button id="watchBtn" onclick="toggleWatch()">☆ Watch</button>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🩹</div>
+      <h1>SelfHealCI</h1>
     </div>
-        <div id="status"></div>
-    <div id="analytics" style="margin: 1.5rem 0; display: flex; gap: 1rem; flex-wrap: wrap;"></div>
+    <div class="auth-line" id="authStatus"></div>
+  </header>
 
-    <div id="incidents">Loading...</div>
+  <div class="controls" id="controlsDiv" style="display:none;">
+    <select id="repoInput" onchange="updateWatchButton()">
+      <option value="">Loading your repos...</option>
+    </select>
+    <button onclick="runAgent()" id="runBtn">Run Agent</button>
+    <button class="secondary" onclick="loadIncidents()">Refresh</button>
+    <button class="watch" id="watchBtn" onclick="toggleWatch()">☆ Watch</button>
+  </div>
 
-    <script>
-                async function loadIncidents() {
-            const container = document.getElementById('incidents');
-            container.innerHTML = 'Loading...';
-            const res = await fetch('/incidents');
+  <div id="status"></div>
 
-            if (res.status === 401) {
-                container.innerHTML = '<p>Connect your GitHub account above to see your incidents.</p>';
-                return;
-            }
+  <div class="stats-grid" id="analytics"></div>
 
-            const data = await res.json();
+  <details class="settings" id="settingsPanel">
+    <summary>🔔 Notification settings</summary>
+    <div class="settings-body">
+      <input type="email" id="notifyEmail" placeholder="Notification email (optional)">
+      <input type="text" id="slackWebhook" placeholder="Slack webhook URL (optional)">
+      <div class="row">
+        <button onclick="saveNotificationSettings()">Save</button>
+        <span id="settingsStatus" style="font-size:0.8rem; color:var(--accent);"></span>
+      </div>
+    </div>
+  </details>
 
-            if (data.length === 0) {
-                container.innerHTML = '<p>No incidents yet.</p>';
-                return;
-            }
+  <h2 class="section-title">Incidents</h2>
+  <div id="incidents">
+    <div class="empty-state">Loading…</div>
+  </div>
 
-                        container.innerHTML = data.map(inc => {
-                let badgeClass = 'pending', badgeText = 'PENDING';
-                if (inc.success === true) { badgeClass = 'success'; badgeText = 'FIXED'; }
-                if (inc.success === false) { badgeClass = 'failed'; badgeText = 'NOT FIXED'; }
+</div>
 
-                const confirmButtons = inc.success === null ? `
-                    <div style="margin-top: 0.75rem;">
-                        <button onclick="confirmIncident(${inc.id}, true)" style="background:#166534; font-size:0.8rem; padding:0.4rem 0.8rem;">✓ Mark Fixed</button>
-                        <button onclick="confirmIncident(${inc.id}, false)" style="background:#991b1b; font-size:0.8rem; padding:0.4rem 0.8rem;">✗ Mark Not Fixed</button>
-                    </div>
-                ` : '';
+<script>
+  let watchedRepos = [];
 
-                return `
-                    <div class="incident">
-                        <span class="badge ${badgeClass}">${badgeText}</span>
-                        <span class="category">${inc.category}</span>
-                        <div class="error-msg">${escapeHtml(inc.error_message)}</div>
-                        <div class="fix-text">${escapeHtml(inc.fix_text)}</div>
-                        <div class="meta">${inc.repo} · ${new Date(inc.created_at).toLocaleString()}</div>
-                        ${confirmButtons}
-                    </div>
-                `;
-            }).join('');
-        }
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
 
-                    function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
+  async function checkAuth() {
+    const res = await fetch('/me');
+    const data = await res.json();
+    const authDiv = document.getElementById('authStatus');
+    const controlsDiv = document.getElementById('controlsDiv');
 
-        async function confirmIncident(id, success) {
-            await fetch(`/incidents/${id}/confirm?success=${success}`, { method: 'POST' });
-            await loadIncidents();
+    if (data.logged_in) {
+      authDiv.innerHTML = `Logged in as <strong>${escapeHtml(data.username)}</strong> &nbsp;·&nbsp; <a href="/auth/logout">Log out</a>`;
+      controlsDiv.style.display = 'flex';
+      await loadMyRepos();
+      await loadAnalytics();
+      await loadWatchedRepos();
+      await loadNotificationSettings();
+    } else {
+      authDiv.innerHTML = `<div class="connect-cta">🔗 <a href="/auth/github/login">Connect GitHub</a> to get started</div>`;
+      controlsDiv.style.display = 'none';
+      document.getElementById('analytics').innerHTML = '';
+      document.getElementById('settingsPanel').style.display = 'none';
+    }
+  }
 
-        }        async function runAgent() {
-            const repo = document.getElementById('repoInput').value.trim();
-            if (!repo) return;
+  async function loadMyRepos() {
+    const select = document.getElementById('repoInput');
+    const res = await fetch('/my-repos');
+    if (!res.ok) return;
+    const repos = await res.json();
+    select.innerHTML = repos.map(r =>
+      `<option value="${r.full_name}">${escapeHtml(r.full_name)}${r.private ? ' 🔒' : ''}</option>`
+    ).join('');
+    updateWatchButton();
+  }
 
-            const btn = document.getElementById('runBtn');
-            const status = document.getElementById('status');
-            btn.disabled = true;
-            status.textContent = 'Running agent...';
+  async function loadAnalytics() {
+    const res = await fetch('/analytics');
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('analytics');
 
-            try {
-                const res = await fetch(`/run-agent?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
-                const data = await res.json();
-                status.textContent = `Done: ${data.status}`;
-                await loadIncidents();
-            } catch (err) {
-                status.textContent = 'Error running agent.';
-            } finally {
-                btn.disabled = false;
-            }
-        }
+    const stat = (label, value, color) => `
+      <div class="stat-card">
+        <div class="stat-value" style="color:${color || 'var(--text)'}">${value}</div>
+        <div class="stat-label">${label}</div>
+      </div>`;
 
-         async function checkAuth() {
-            const res = await fetch('/me');
-            const data = await res.json();
-            const authDiv = document.getElementById('authStatus');
-            const controlsDiv = document.getElementById('controlsDiv');
+    el.innerHTML =
+      stat('Total Incidents', data.total) +
+      stat('Fixed', data.fixed, 'var(--green)') +
+      stat('Not Fixed', data.not_fixed, 'var(--red)') +
+      stat('Pending', data.pending, 'var(--amber)') +
+      stat('Success Rate', data.success_rate !== null ? data.success_rate + '%' : '—', 'var(--accent)');
+  }
 
-            if (data.logged_in) {
-                authDiv.innerHTML = `Logged in as <strong>${data.username}</strong> · <a href="/auth/logout" style="color:#a5b4fc;">Log out</a>`;
-                controlsDiv.style.display = 'flex';
-                await loadMyRepos();
-                await loadAnalytics();
-                await loadWatchedRepos();
-            } else {
-                authDiv.innerHTML = `<a href="/auth/github/login" style="color:#4ade80;">🔗 Connect GitHub</a> to run the agent with your own account`;
-                controlsDiv.style.display = 'none';
-            }
-        }
+  async function loadWatchedRepos() {
+    const res = await fetch('/watched-repos');
+    if (!res.ok) return;
+    watchedRepos = await res.json();
+    updateWatchButton();
+  }
 
-        async function loadAnalytics() {
-            const res = await fetch('/analytics');
-            if (!res.ok) return;
-            const data = await res.json();
-            const el = document.getElementById('analytics');
+  function updateWatchButton() {
+    const repo = document.getElementById('repoInput').value;
+    const btn = document.getElementById('watchBtn');
+    if (watchedRepos.includes(repo)) {
+      btn.textContent = '★ Watching';
+      btn.className = 'watching';
+    } else {
+      btn.textContent = '☆ Watch';
+      btn.className = 'watch';
+    }
+  }
 
-            const stat = (label, value, color) => `
-                <div style="background:#1a1d27; border:1px solid #2a2d3a; border-radius:8px; padding:0.75rem 1.25rem; min-width:110px;">
-                    <div style="font-size:1.5rem; font-weight:bold; color:${color || '#fff'};">${value}</div>
-                    <div style="font-size:0.75rem; color:#a1a1aa;">${label}</div>
-                </div>
-            `;
+  async function toggleWatch() {
+    const repo = document.getElementById('repoInput').value;
+    if (!repo) return;
+    if (watchedRepos.includes(repo)) {
+      await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' });
+    } else {
+      await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
+    }
+    await loadWatchedRepos();
+  }
 
-            el.innerHTML =
-                stat('Total Incidents', data.total) +
-                stat('Fixed', data.fixed, '#4ade80') +
-                stat('Not Fixed', data.not_fixed, '#f87171') +
-                stat('Pending', data.pending, '#fbbf24') +
-                stat('Success Rate', data.success_rate !== null ? data.success_rate + '%' : '—', '#a5b4fc');
-        }
+  async function loadNotificationSettings() {
+    const res = await fetch('/settings/notifications');
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('notifyEmail').value = data.email || '';
+    document.getElementById('slackWebhook').value = data.slack_webhook_url || '';
+  }
 
-        async function loadMyRepos() {
-            const select = document.getElementById('repoInput');
-            const res = await fetch('/my-repos');
-            if (!res.ok) return;
-            const repos = await res.json();
+  async function saveNotificationSettings() {
+    const email = document.getElementById('notifyEmail').value.trim();
+    const slack = document.getElementById('slackWebhook').value.trim();
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (slack) params.append('slack_webhook_url', slack);
+    await fetch(`/settings/notifications?${params.toString()}`, { method: 'POST' });
+    const s = document.getElementById('settingsStatus');
+    s.textContent = 'Saved';
+    setTimeout(() => { s.textContent = ''; }, 2000);
+  }
 
-            select.innerHTML = repos.map(r =>
-                `<option value="${r.full_name}">${r.full_name}${r.private ? ' 🔒' : ''}</option>`
-            ).join('');
-        }
+  async function loadIncidents() {
+    const container = document.getElementById('incidents');
+    container.innerHTML = '<div class="empty-state">Loading…</div>';
+    const res = await fetch('/incidents');
 
-                let watchedRepos = [];
+    if (res.status === 401) {
+      container.innerHTML = '<div class="empty-state">Connect your GitHub account above to see your incidents.</div>';
+      return;
+    }
 
-        async function loadWatchedRepos() {
-            const res = await fetch('/watched-repos');
-            if (!res.ok) return;
-            watchedRepos = await res.json();
-            updateWatchButton();
-        }
+    const data = await res.json();
 
-        function updateWatchButton() {
-            const repo = document.getElementById('repoInput').value;
-            const btn = document.getElementById('watchBtn');
-            if (watchedRepos.includes(repo)) {
-                btn.textContent = '★ Watching';
-                btn.style.background = '#166534';
-            } else {
-                btn.textContent = '☆ Watch';
-                btn.style.background = '#4f46e5';
-            }
-        }
+    if (data.length === 0) {
+      container.innerHTML = '<div class="empty-state">No incidents yet — run the agent on a repo to get started.</div>';
+      return;
+    }
 
-        async function toggleWatch() {
-            const repo = document.getElementById('repoInput').value;
-            if (!repo) return;
+    container.innerHTML = data.map(inc => {
+      let badgeClass = 'pending', badgeText = 'Pending';
+      if (inc.success === true) { badgeClass = 'success'; badgeText = 'Fixed'; }
+      if (inc.success === false) { badgeClass = 'failed'; badgeText = 'Not Fixed'; }
 
-            if (watchedRepos.includes(repo)) {
-                await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' });
-            } else {
-                await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
-            }
-            await loadWatchedRepos();
-        }
+      const confirmButtons = inc.success === null ? `
+        <div class="confirm-row">
+          <button class="confirm-fixed" onclick="confirmIncident(${inc.id}, true)">✓ Mark Fixed</button>
+          <button class="confirm-notfixed" onclick="confirmIncident(${inc.id}, false)">✗ Mark Not Fixed</button>
+        </div>` : '';
 
-        checkAuth();
-        loadIncidents();
+      return `
+        <div class="incident">
+          <div class="incident-head">
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <span class="category">${escapeHtml(inc.category)}</span>
+          </div>
+          <div class="error-msg">${escapeHtml(inc.error_message)}</div>
+          <div class="fix-text">${escapeHtml(inc.fix_text)}</div>
+          <div class="meta">${escapeHtml(inc.repo)} · ${new Date(inc.created_at).toLocaleString()}</div>
+          ${confirmButtons}
+        </div>`;
+    }).join('');
+  }
 
-    </script>
+  async function confirmIncident(id, success) {
+    await fetch(`/incidents/${id}/confirm?success=${success}`, { method: 'POST' });
+    await loadIncidents();
+    await loadAnalytics();
+  }
+
+  async function runAgent() {
+    const repo = document.getElementById('repoInput').value.trim();
+    if (!repo) return;
+
+    const btn = document.getElementById('runBtn');
+    const status = document.getElementById('status');
+    btn.disabled = true;
+    status.textContent = 'Running agent…';
+
+    try {
+      const res = await fetch(`/run-agent?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
+      const data = await res.json();
+      status.textContent = res.ok ? `Done — ${data.status.replace(/_/g, ' ')}` : `Error: ${data.detail || 'something went wrong'}`;
+      await loadIncidents();
+      await loadAnalytics();
+    } catch (err) {
+      status.textContent = 'Error running agent.';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  checkAuth();
+  loadIncidents();
+</script>
 </body>
 </html>
