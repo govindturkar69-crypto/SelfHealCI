@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from fastapi import HTTPException
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 
@@ -20,6 +21,37 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET"))
 GITHUB_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET")
 REDIRECT_URI = "http://127.0.0.1:8080/auth/github/callback"
+
+def scheduled_check():
+    """Runs periodically: checks every watched repo for each user who owns it."""
+    print("\n[Scheduler] Running scheduled check of all watched repos...")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT watched_repos.repo, watched_repos.user_id, users.github_access_token
+        FROM watched_repos
+        JOIN users ON users.id = watched_repos.user_id
+        """
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    for repo, user_id, token in rows:
+        try:
+            print(f"[Scheduler] Checking {repo} for user {user_id}...")
+            run_agent(repo, token=token, user_id=user_id)
+        except Exception as e:
+            print(f"[Scheduler] Error checking {repo}: {e}")
+
+    print("[Scheduler] Done.\n")
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(scheduled_check, "interval", minutes=30)
+scheduler.start()
 
 
 @app.get("/auth/github/login")
@@ -237,3 +269,111 @@ def my_repos(request: Request):
     repos = response.json()
 
     return [{"full_name": r["full_name"], "private": r["private"]} for r in repos]
+
+@app.get("/analytics")
+def analytics(request: Request):
+    """Returns summary stats for the logged-in user's incidents."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM incidents WHERE user_id = %s", (user_id,))
+    total = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM incidents WHERE user_id = %s AND success = TRUE", (user_id,))
+    fixed = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM incidents WHERE user_id = %s AND success = FALSE", (user_id,))
+    not_fixed = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM incidents WHERE user_id = %s AND success IS NULL", (user_id,))
+    pending = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT category, COUNT(*) FROM incidents
+        WHERE user_id = %s
+        GROUP BY category
+        ORDER BY COUNT(*) DESC
+        """,
+        (user_id,)
+    )
+    by_category = [{"category": r[0], "count": r[1]} for r in cur.fetchall()]
+
+    cur.execute(
+        """
+        SELECT repo, COUNT(*) FROM incidents
+        WHERE user_id = %s
+        GROUP BY repo
+        ORDER BY COUNT(*) DESC
+        """,
+        (user_id,)
+    )
+    by_repo = [{"repo": r[0], "count": r[1]} for r in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+
+    success_rate = round((fixed / (fixed + not_fixed) * 100), 1) if (fixed + not_fixed) > 0 else None
+
+    return {
+        "total": total,
+        "fixed": fixed,
+        "not_fixed": not_fixed,
+        "pending": pending,
+        "success_rate": success_rate,
+        "by_category": by_category,
+        "by_repo": by_repo,
+    }
+@app.post("/watched-repos")
+def add_watched_repo(repo: str, request: Request):
+    """Adds a repo to the logged-in user's auto-check list."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO watched_repos (user_id, repo) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        (user_id, repo)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "watching", "repo": repo}
+
+
+@app.delete("/watched-repos")
+def remove_watched_repo(repo: str, request: Request):
+    """Removes a repo from the logged-in user's auto-check list."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM watched_repos WHERE user_id = %s AND repo = %s", (user_id, repo))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "unwatched", "repo": repo}
+
+
+@app.get("/watched-repos")
+def list_watched_repos(request: Request):
+    """Lists the logged-in user's auto-checked repos."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="You must connect your GitHub account first.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT repo FROM watched_repos WHERE user_id = %s", (user_id,))
+    repos = [r[0] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return repos

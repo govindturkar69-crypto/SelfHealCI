@@ -29,13 +29,15 @@
     <div id="authStatus" style="margin-bottom: 1rem; font-size: 0.9rem;"></div>
 
         <div class="controls" id="controlsDiv" style="display:none;">
-                <select id="repoInput" style="flex:1; padding:0.6rem; background:#1a1d27; color:#fff; border:1px solid #333; border-radius:6px;">
+                <select id="repoInput" onchange="updateWatchButton()" style="flex:1; padding:0.6rem; background:#1a1d27; color:#fff; border:1px solid #333; border-radius:6px;">
             <option value="">Log in to load your repos...</option>
         </select>
         <button id="runBtn" onclick="runAgent()">Run Agent</button>
         <button onclick="loadIncidents()">Refresh</button>
+        <button id="watchBtn" onclick="toggleWatch()">☆ Watch</button>
     </div>
-    <div id="status"></div>
+        <div id="status"></div>
+    <div id="analytics" style="margin: 1.5rem 0; display: flex; gap: 1rem; flex-wrap: wrap;"></div>
 
     <div id="incidents">Loading...</div>
 
@@ -113,7 +115,7 @@
             }
         }
 
-                                async function checkAuth() {
+         async function checkAuth() {
             const res = await fetch('/me');
             const data = await res.json();
             const authDiv = document.getElementById('authStatus');
@@ -123,10 +125,33 @@
                 authDiv.innerHTML = `Logged in as <strong>${data.username}</strong> · <a href="/auth/logout" style="color:#a5b4fc;">Log out</a>`;
                 controlsDiv.style.display = 'flex';
                 await loadMyRepos();
+                await loadAnalytics();
+                await loadWatchedRepos();
             } else {
                 authDiv.innerHTML = `<a href="/auth/github/login" style="color:#4ade80;">🔗 Connect GitHub</a> to run the agent with your own account`;
                 controlsDiv.style.display = 'none';
             }
+        }
+
+        async function loadAnalytics() {
+            const res = await fetch('/analytics');
+            if (!res.ok) return;
+            const data = await res.json();
+            const el = document.getElementById('analytics');
+
+            const stat = (label, value, color) => `
+                <div style="background:#1a1d27; border:1px solid #2a2d3a; border-radius:8px; padding:0.75rem 1.25rem; min-width:110px;">
+                    <div style="font-size:1.5rem; font-weight:bold; color:${color || '#fff'};">${value}</div>
+                    <div style="font-size:0.75rem; color:#a1a1aa;">${label}</div>
+                </div>
+            `;
+
+            el.innerHTML =
+                stat('Total Incidents', data.total) +
+                stat('Fixed', data.fixed, '#4ade80') +
+                stat('Not Fixed', data.not_fixed, '#f87171') +
+                stat('Pending', data.pending, '#fbbf24') +
+                stat('Success Rate', data.success_rate !== null ? data.success_rate + '%' : '—', '#a5b4fc');
         }
 
         async function loadMyRepos() {
@@ -140,7 +165,40 @@
             ).join('');
         }
 
-             checkAuth();
+                let watchedRepos = [];
+
+        async function loadWatchedRepos() {
+            const res = await fetch('/watched-repos');
+            if (!res.ok) return;
+            watchedRepos = await res.json();
+            updateWatchButton();
+        }
+
+        function updateWatchButton() {
+            const repo = document.getElementById('repoInput').value;
+            const btn = document.getElementById('watchBtn');
+            if (watchedRepos.includes(repo)) {
+                btn.textContent = '★ Watching';
+                btn.style.background = '#166534';
+            } else {
+                btn.textContent = '☆ Watch';
+                btn.style.background = '#4f46e5';
+            }
+        }
+
+        async function toggleWatch() {
+            const repo = document.getElementById('repoInput').value;
+            if (!repo) return;
+
+            if (watchedRepos.includes(repo)) {
+                await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' });
+            } else {
+                await fetch(`/watched-repos?repo=${encodeURIComponent(repo)}`, { method: 'POST' });
+            }
+            await loadWatchedRepos();
+        }
+
+        checkAuth();
         loadIncidents();
 
     </script>
